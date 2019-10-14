@@ -1,0 +1,161 @@
+# This program shows net working capital for the period of Oct 19 - Jan 20 in a chart form
+# In its first iteration to cover any immediate gap in the working capital, it will suggest the number of loans to take, starting date, loan amount, and financing period(s) required
+# And then it shows the net working capital after taking the first loan(s)
+# The program also reports the cost of borrowing to fill the gap
+# But in case you're not filling any gaps, but are considering using the surplus in working capital for other investment purposes, then the return of investment should cover the cost of borrowing
+
+# Install additional packages on top of R Base
+#install.packages("dplyr")
+#install.packages("lubridate")
+#install.packages("lpSolve")
+#install.packages("lpSolveAPI")
+#install.packages("ggplot2")
+
+
+# Read working capital data
+
+workingCap <- read.table(file = "workingCap.csv", header = TRUE, sep = ",", stringsAsFactors = FALSE)
+colnames(workingCap) <- c("Date", "Cash", "Inventory", "AccRecv", "AccPaybles", "NotesPaybles", "NetWorkingCap")
+str(workingCap)
+
+# Format the dates
+# Overrides Date in Base
+library(lubridate)
+workingCap$Date = ymd(workingCap$Date)
+str(workingCap)
+
+
+# Plot Net working capital
+
+# Use ggplot2 library
+library(ggplot2)
+
+# Specify h & v position of the label for positive net working capital
+h <- ymd('2019-10-01') + 7
+v <- 300
+
+# Plot Net working capital
+netWorkingCapPlot <- ggplot(workingCap, aes(x = Date, y = NetWorkingCap)) +  geom_line()
+netWorkingCapPlot +  
+  geom_hline(yintercept = 0,
+             linetype = "dashed",
+             size = 0.5) +
+  annotate("text", 
+           x = h, y = v, 
+           label = "+ve net working capital",
+           family = "serif", 
+           fontface = "italic", 
+           colour = "darkgreen", 
+           size = 3) +
+  ggtitle("Net working capital for the period of Oct 2019 - Jan 2020")
+
+
+# Short-term loan(s) to cover immediate gap
+
+# Iteration 1
+
+# Input the starting date of loans and the amount to fill the immediate working capital gap
+# It would suggest what loan to take & for how many days
+finGap <- 2000
+loanStartDate <- '2019-10-17'
+vecAccumulatedInterests <- vector()
+
+# Use lpSolve to find the least cost of borrowing
+# Based on linear programming method
+# Load library lpSolve
+library(lpSolve)
+
+# Input Rates
+# Calculate Per Annum insterest rate div by 360 days 
+objective.in  <- c(3/360, 2/360)
+objective.in 
+
+# Input Principal amount and Tenures 
+tenureDays_qLoan <- 7
+principal_qLoan <-1400
+dailyPrincipal_qLoan <- principal_qLoan / tenureDays_qLoan
+
+tenureDays_tBank <- 30
+principal_tBank <-900
+dailyPrincipal_tBank <- principal_tBank / tenureDays_tBank
+
+# Specify the boundary where the model works 
+constraints <- matrix(c(1,0, 0,1, 1,0, 0,1, dailyPrincipal_qLoan,30), nrow = 5, byrow = TRUE)
+constraints
+
+maxDays_qLoan_constraints <- tenureDays_qLoan
+maxDays_tBank_constraints <- tenureDays_tBank
+minDays_qLoan_constraints <- 0
+minDays_tBank_constraints <- 0
+loanAmount_constraints <- finGap
+
+rhs <- c(maxDays_qLoan_constraints, maxDays_tBank_constraints, minDays_qLoan_constraints, minDays_tBank_constraints, loanAmount_constraints)
+rhs
+
+direction  <- c("<=", "<=", ">=", ">=", ">=")
+direction
+
+# Optimum solution
+optimum <-  lp(direction="min",  objective.in, constraints, direction,  rhs)
+optimum
+
+# Optimum solution
+optimum$solution
+
+
+# Put the results in vector format
+
+# vecPrincipal
+vecPrincipal <- c(principal_qLoan, principal_tBank)
+vecPrincipal
+
+# vecRate
+vecRate <- objective.in
+vecRate
+
+# vecDays (Tenures)
+vecDays <- optimum$solution
+vecDays
+
+# Payment upon maturity
+vecPayment <- vecPrincipal*(1+vecRate*vecDays)
+vecPayment
+
+# Accumulated interests
+vecAccumulatedInterests <- vecPayment - vecPrincipal
+vecAccumulatedInterests
+
+# For the repayment period
+vecForThePeriod <- vecDays
+vecForThePeriod
+
+# Starting from
+loanStartDate <- '2019-10-17'
+loanStartDate
+
+
+# Show the Net working capital after taking the first loan(s)
+
+# Read new working capital data
+iter1WorkingCap <- read.table(file = "iter1.csv", header = TRUE, sep = ",", stringsAsFactors = FALSE)
+colnames(iter1WorkingCap) <- c("Date", "Cash", "Inventory", "AccRecv", "AccPaybles", "NotesPaybles", "NetWorkingCap")
+str(iter1WorkingCap)
+
+# Format the dates
+iter1WorkingCap$Date = ymd(iter1WorkingCap$Date)
+str(iter1WorkingCap)
+
+#Plot iter 1
+netWorkingCapPlot <- ggplot(iter1WorkingCap, aes(x = Date, y = NetWorkingCap)) +  geom_line()
+netWorkingCapPlot +  
+  geom_hline(yintercept = 0,
+             linetype = "dashed",
+             size = 0.5) +
+  annotate("text", 
+           x = h, y = v, 
+           label = "+ve net working capital",
+           family = "serif", 
+           fontface = "italic", 
+           colour = "darkgreen", 
+           size = 3) +
+  ggtitle("Iteration 1 - Net working capital after taking the first loan(s)")
